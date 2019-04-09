@@ -6,7 +6,8 @@ from __future__ import print_function
 from keras.optimizers import Adam, SGD
 from keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
 
-from utils import get_json, get_random_data, data_generator_wrapper, unzip, label_shuffle
+from utils import get_json, data_generator_wrapper, unzip, label_shuffle
+from utils import recycle_pool
 from models.inception_resnet_v2 import build_model
 
 def main(model_name = 'resnet50', continue_training=False):
@@ -92,7 +93,7 @@ def main(model_name = 'resnet50', continue_training=False):
 
   #get train image path and image nums
   train_anno_list = get_json(train_annotation_path)
-  train_anno_list = label_shuffle(train_anno_list) #add label shuffling
+  #train_anno_list = label_shuffle(train_anno_list) #add label shuffling
   num_train = len(train_anno_list)
   val_anno_list = get_json(val_annotation_path)
   num_val = len(val_anno_list)
@@ -102,41 +103,43 @@ def main(model_name = 'resnet50', continue_training=False):
   for layer in model.layers[:-3]:
     layer.trainable = False
   model.compile(optimizer=Adam(lr=1e-3), loss='categorical_crossentropy', metrics=['accuracy'])
-  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, is_training=False),
+  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
-          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, is_training=False),
+          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode=None),
           validation_steps=max(1, num_val//batch_size),
           epochs=1,
           initial_epoch=0,
           callbacks=[logging, checkpoint])
   model.save_weights(log_dir + 'train_only_fc_2epoches.h5')
+  recycle_pool()
 
   #训练所有层
   for layer in model.layers:
     layer.trainable = True
   model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
-  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, is_training=True),
+  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
-          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, is_training=False),
+          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode=None),
           validation_steps=max(1, num_val//batch_size),
           epochs=10,
           initial_epoch=1,
           callbacks=[logging, checkpoint])
   model.save_weights(log_dir + 'train_all_layers_stage1.h5')
+  recycle_pool()
 
   #继续训练
   for layer in model.layers:
     layer.trainable = True
   model.compile(optimizer=Adam(lr=5e-6), loss='categorical_crossentropy', metrics=['accuracy'])
-  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, is_training=True),
+  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
-          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, is_training=False),
+          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode=None),
           validation_steps=max(1, num_val//batch_size),
           epochs=8,
           initial_epoch=5,
           callbacks=[logging, checkpoint])
   model.save_weights(log_dir + 'train_all_layers_stage2.h5')
-
+  recycle_pool()
 
 
 if __name__ == "__main__":

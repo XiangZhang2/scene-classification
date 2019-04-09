@@ -1,10 +1,27 @@
 # -*- coding=utf-8 -*-
-import os
 from PIL import Image, ImageEnhance
 #import matplotlib.pyplot as plt
 import numpy as np
 import random
 from fractions import Fraction
+from keras.utils.np_utils import to_categorical
+
+
+def load_data(annotation_list, image_size, image_dir, crop_mode=None):
+    '''load image and label,image:PIL format'''
+    image = Image.open(image_dir + annotation_list[1])
+
+    if crop_mode == None:
+        image = image.resize((image_size, image_size), Image.BICUBIC)
+    elif crop_mode == 'random':
+        image = random_crop(image, image_size)
+    else:
+        raise Exception('The crop_mode does not exist.')
+
+    label = np.array(annotation_list[0])
+    label = to_categorical(label, num_classes=80)  #modify there if classes is not 80
+
+    return image, label
 
 
 def ten_crop(image, crop_mode='center'):
@@ -81,7 +98,30 @@ def random_crop(image, size):
         return image
 
 
+def z_score(image):
+    '''标准化预处理'''
+    image = image / 255.
+
+    mean = [0.4960301824223457, 0.47806493084428053, 0.44767167301470545]
+    var = [0.084966025569294362, 0.082005493489533315, 0.088877477602068156]
+    
+    if len(image.shape) == 3:
+        image = image.astype(np.float32)
+        image[:,:,0] = (image[:,:,0] - mean[0]) / var[0]
+        image[:,:,1] = (image[:,:,1] - mean[1]) / var[1]
+        image[:,:,2] = (image[:,:,2] - mean[2]) / var[2]
+    elif len(image.shape) == 4:
+        image[:,:,:,0] = (image[:,:,:,0] - mean[0]) / var[0]
+        image[:,:,:,1] = (image[:,:,:,1] - mean[1]) / var[1]
+        image[:,:,:,2] = (image[:,:,:,2] - mean[2]) / var[2]
+    else:
+        raise Exception('Format error.')
+
+    return image
+
+
 def color_jitter(image):
+    '''颜色增强'''
     brightness_var = 0.4
     saturation_var = 0.5
     contrast_var = 0.4
@@ -100,7 +140,8 @@ def color_jitter(image):
     return image
 
 
-def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=255, pixel_level=False):
+def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3,
+                      r_2=1/0.3, v_l=0, v_h=255, pixel_level=False):
     def eraser(input_img):
         img_h, img_w, img_c = input_img.shape
         p_1 = np.random.rand()
@@ -131,19 +172,27 @@ def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3, r_2=1/0.3, v_l=0, v_h=2
     return eraser
 
 
+def aug_images_single(image):
+    '''image: PIL image, return a np array
+    '''
+    image = color_jitter(image)
+    
+    #random flip left and right
+    if np.random.uniform() < 0.5:
+        image = image.transpose(Image.FLIP_LEFT_RIGHT)
 
-# def random_crop_image(image):
-#     height, width = image.shape[:2]
-#     random_array = np.random.random(size=4);
-#     w = int((width*0.5)*(1+random_array[0]*0.5))
-#     h = int((height*0.5)*(1+random_array[1]*0.5))
-#     x = int(random_array[2]*(width-w))
-#     y = int(random_array[3]*(height-h))
+    #random erasing
+    image = np.asarray(image)
+    image.flags.writeable = True
+    eraser = get_random_eraser()
+    image = eraser(image)
 
-#     image_crop = image[y:h+y,x:w+x,0:3]
-#     print image_crop
-#     image_crop = misc.imresize(image_crop,(299,299,3))
-#     return image_crop
+    return image
+
+
+
+
+
 
 
 
