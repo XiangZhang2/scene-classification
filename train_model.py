@@ -5,10 +5,10 @@ from __future__ import print_function
 
 from keras.optimizers import Adam, SGD
 from keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
-
 from utils import get_json, data_generator_wrapper, unzip, label_shuffle
 from utils import recycle_pool
 from models.inception_resnet_v2 import build_model
+
 
 def main(model_name = 'resnet50', continue_training=False):
 
@@ -105,7 +105,7 @@ def main(model_name = 'resnet50', continue_training=False):
   model.compile(optimizer=Adam(lr=1e-3), loss='categorical_crossentropy', metrics=['accuracy'])
   model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
-          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode=None),
+          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode='random'),
           validation_steps=max(1, num_val//batch_size),
           epochs=1,
           initial_epoch=0,
@@ -119,7 +119,7 @@ def main(model_name = 'resnet50', continue_training=False):
   model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
   model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
-          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode=None),
+          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode='random'),
           validation_steps=max(1, num_val//batch_size),
           epochs=10,
           initial_epoch=1,
@@ -133,7 +133,7 @@ def main(model_name = 'resnet50', continue_training=False):
   model.compile(optimizer=Adam(lr=5e-6), loss='categorical_crossentropy', metrics=['accuracy'])
   model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
-          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode=None),
+          validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode='random'),
           validation_steps=max(1, num_val//batch_size),
           epochs=8,
           initial_epoch=5,
