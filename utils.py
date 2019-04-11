@@ -149,7 +149,6 @@ def func_batch_handle(batch_x, train, standard):
 
 
 
-
 def data_generator(annotation_list, batch_size, image_size,
                    image_dir, train, standard, crop_mode):
     '''data generator for fit_generator'''
