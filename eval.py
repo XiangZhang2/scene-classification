@@ -3,7 +3,7 @@ import os
 import json
 from PIL import Image
 import numpy as np
-from keras import backend as K
+#from keras import backend as K
 
 from utils import unzip 
 from models.inception_resnet_v2 import build_model

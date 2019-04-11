@@ -172,20 +172,24 @@ def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3,
     return eraser
 
 
-def aug_images_single(image):
+def aug_images_single(image, train):
     '''image: PIL image, return a np array
     '''
-    image = color_jitter(image)
-    
-    #random flip left and right
-    if np.random.uniform() < 0.5:
-        image = image.transpose(Image.FLIP_LEFT_RIGHT)
+    if train:
+        image = color_jitter(image)
+        
+        #random flip left and right
+        if np.random.uniform() < 0.5:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
 
-    #random erasing
-    image = np.asarray(image)
-    image.flags.writeable = True
-    eraser = get_random_eraser()
-    image = eraser(image)
+        #random erasing
+        image = np.asarray(image)
+        image.flags.writeable = True
+        eraser = get_random_eraser()
+        image = eraser(image)
+    else:
+        image = np.asarray(image)
+        image.flags.writeable = True
 
     return image
 

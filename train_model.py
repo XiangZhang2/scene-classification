@@ -6,8 +6,9 @@ from __future__ import print_function
 from keras.optimizers import Adam, SGD
 from keras.callbacks import ModelCheckpoint, EarlyStopping, TensorBoard, ReduceLROnPlateau
 from utils import get_json, data_generator_wrapper, unzip, label_shuffle
-from utils import recycle_pool
 from models.inception_resnet_v2 import build_model
+from keras.utils import multi_gpu_model
+import tensorflow as tf
 
 
 def main(model_name = 'resnet50', continue_training=False):
@@ -15,10 +16,10 @@ def main(model_name = 'resnet50', continue_training=False):
   ucloud = False
 
   if model_name == 'resnet50':
-    batch_size = 32
+    batch_size = 128
     image_size = 224
   elif model_name == 'inception_resnet_v2':
-    batch_size = 16
+    batch_size = 64
     image_size = 299
   else:
     raise ValueError('model name uncorrect!!')
@@ -71,18 +72,18 @@ def main(model_name = 'resnet50', continue_training=False):
     print('success creat Densenet169 model!!!')
     print('load_weights succeed!!')
 
-  if continue_training:
-    weights = None
-    weights_path = ''
+  with tf.device('/cpu:0'):
+    if continue_training:
+      weights = None
+      weights_path = ''
+      model = build_model(weights)
+      print('success creat ' + str(model_name))
+      model.load_weights(weights_path)
+      print('load_weights succeed!!')
+      
     model = build_model(weights)
     print('success creat ' + str(model_name))
-    model.load_weights(weights_path)
     print('load_weights succeed!!')
-    
-  model = build_model(weights)
-  print('success creat ' + str(model_name))
-  print('load_weights succeed!!')
-  
 
 
   logging = TensorBoard(log_dir=log_dir)
@@ -100,46 +101,50 @@ def main(model_name = 'resnet50', continue_training=False):
 
   
   #先训练最后三层（AVP、Desne、Dense）
-  for layer in model.layers[:-3]:
-    layer.trainable = False
-  model.compile(optimizer=Adam(lr=1e-3), loss='categorical_crossentropy', metrics=['accuracy'])
-  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
+  for layer in model.layers:
+    layer.trainable = True
+  parallel_model = multi_gpu_model(model, gpus=4)
+  
+  parallel_model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
+  parallel_model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
           validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode='random'),
           validation_steps=max(1, num_val//batch_size),
-          epochs=1,
+          epochs=2,
           initial_epoch=0,
           callbacks=[logging, checkpoint])
   model.save_weights(log_dir + 'train_only_fc_2epoches.h5')
-  recycle_pool()
+
 
   #训练所有层
   for layer in model.layers:
     layer.trainable = True
-  model.compile(optimizer=Adam(lr=1e-4), loss='categorical_crossentropy', metrics=['accuracy'])
-  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
+  #parallel_model = multi_gpu_model(model, gpus=4)
+  parallel_model.compile(optimizer=Adam(lr=1e-5), loss='categorical_crossentropy', metrics=['accuracy'])
+  parallel_model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
           validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode='random'),
           validation_steps=max(1, num_val//batch_size),
-          epochs=10,
-          initial_epoch=1,
+          epochs=5,
+          initial_epoch=2,
           callbacks=[logging, checkpoint])
   model.save_weights(log_dir + 'train_all_layers_stage1.h5')
-  recycle_pool()
+
 
   #继续训练
   for layer in model.layers:
     layer.trainable = True
-  model.compile(optimizer=Adam(lr=5e-6), loss='categorical_crossentropy', metrics=['accuracy'])
-  model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
+  #parallel_model = multi_gpu_model(model, gpus=4)
+  parallel_model.compile(optimizer=Adam(lr=5e-6), loss='categorical_crossentropy', metrics=['accuracy'])
+  parallel_model.fit_generator(data_generator_wrapper(train_anno_list, batch_size, image_size, train_image_dir, train=True),
           steps_per_epoch=max(1, num_train//batch_size),
           validation_data=data_generator_wrapper(val_anno_list, batch_size, image_size, val_image_dir, train=False, crop_mode='random'),
           validation_steps=max(1, num_val//batch_size),
-          epochs=8,
+          epochs=6,
           initial_epoch=5,
           callbacks=[logging, checkpoint])
   model.save_weights(log_dir + 'train_all_layers_stage2.h5')
-  recycle_pool()
+
 
 
 if __name__ == "__main__":

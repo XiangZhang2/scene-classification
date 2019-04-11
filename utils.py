@@ -107,34 +107,28 @@ def label_shuffle(annotation_list):
     return annotation_list_with_shuffle
 
 
-class PoolHolder(object):
-    def __init__(self, pool=None):
-        self.pool = pool
-
-
-holder = PoolHolder()
-
-
-def recycle_pool():
-    if holder.pool:
-        holder.pool.close()
-
-
 def _process_image_worker(tup):
-    process, img = tup
-    ret = process(img)
+    process, img, train = tup
+    ret = process(img, train)
     return ret
 
 
 def func_batch_handle_with_multi_process(batch_x, train, standard):
     '''batch_x: PIL image list'''
     if train:
-        holder.pool = multiprocessing.Pool()
-        result = holder.pool.map(
-            _process_image_worker,
-            ((aug_images_single, image) for image in batch_x)
-        )
+        pool = multiprocessing.Pool()
+        # result = pool.map(
+        #     _process_image_worker,
+        #     ((aug_images_single, image) for image in batch_x)
+        # )
+        result = pool.map(_process_image_worker,
+                          ((aug_images_single, image, train) for image in batch_x))
+        pool.close()
+        pool.join()
         batch_x = np.array(result)
+    else:
+        pool = multiprocessing.Pool()
+
     
     if standard:
         batch_x = z_score(batch_x)
@@ -143,6 +137,17 @@ def func_batch_handle_with_multi_process(batch_x, train, standard):
         batch_x = batch_x / 127.5
         batch_x = batch_x - 1
     return batch_x
+
+
+def func_batch_handle(batch_x, train, standard):
+    if train:
+        image_list = []
+        for image in batch_x:
+            image = aug_images_single(image)
+            image_list.append(image)
+        batch_x = np.array(image_list)
+
+
 
 
 def data_generator(annotation_list, batch_size, image_size,
@@ -165,6 +170,7 @@ def data_generator(annotation_list, batch_size, image_size,
         #多进程数据增强
         image_data = func_batch_handle_with_multi_process(image_data, train,
                                                           standard)
+
         label_data = np.array(label_data)
         yield (image_data, label_data)
 
@@ -172,7 +178,7 @@ def data_generator(annotation_list, batch_size, image_size,
 def data_generator_wrapper(annotation_list, batch_size, image_size, image_dir,
                            train=True, standard=True, crop_mode='random'):
     n = len(annotation_list)
-    if n==0 or batch_size<=0: 
+    if n==0 or batch_size<=0:
         return None
     return data_generator(annotation_list, batch_size, image_size,
                           image_dir, train, standard, crop_mode)
