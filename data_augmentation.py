@@ -1,27 +1,17 @@
-# -*- coding=utf-8 -*-
+# -*- coding:utf-8 -*-
+# standard lib
+import random
+import multiprocessing
+from fractions import Fraction
+
+# third lib
+import numpy as np
 from PIL import Image, ImageEnhance
 #import matplotlib.pyplot as plt
-import numpy as np
-import random
-from fractions import Fraction
 from keras.utils.np_utils import to_categorical
 
+# own lib
 
-def load_data(annotation_list, image_size, image_dir, crop_mode=None):
-    '''load image and label,image:PIL format'''
-    image = Image.open(image_dir + annotation_list[1])
-
-    if crop_mode == None:
-        image = image.resize((image_size, image_size), Image.BICUBIC)
-    elif crop_mode == 'random':
-        image = random_crop(image, image_size)
-    else:
-        raise Exception('The crop_mode does not exist.')
-
-    label = np.array(annotation_list[0])
-    label = to_categorical(label, num_classes=80)  #modify there if classes is not 80
-
-    return image, label
 
 
 def ten_crop(image, crop_mode='center'):
@@ -100,7 +90,9 @@ def random_crop(image, size):
 
 def z_score(image):
     '''标准化预处理'''
-    image = image / 255.
+    #image = image.astype(np.float32)
+    scale = 1 / 255.
+    image = image * scale
 
     mean = [0.4960301824223457, 0.47806493084428053, 0.44767167301470545]
     var = [0.084966025569294362, 0.082005493489533315, 0.088877477602068156]
@@ -172,9 +164,41 @@ def get_random_eraser(p=0.5, s_l=0.02, s_h=0.4, r_1=0.3,
     return eraser
 
 
-def aug_images_single(image, train):
+def load_data(annotation_list, image_size, image_dir, crop_mode=None):
+    '''load image and label,image:PIL format'''
+    image = Image.open(image_dir + annotation_list[1])
+
+    if crop_mode == None:
+        image = image.resize((image_size, image_size), Image.BICUBIC)
+    elif crop_mode == 'random':
+        image = random_crop(image, image_size)
+    else:
+        raise Exception('The crop_mode does not exist.')
+
+    label = np.array(annotation_list[0])
+    label = to_categorical(label, num_classes=80)  #modify there if classes is not 80
+
+    return image, label
+
+
+def load_and_process_single_image(image_path, image_size, train, crop_mode):
     '''image: PIL image, return a np array
+    Args:
+        image_path:
+        image_size:
+        train:
+        crop_mode
+    returns:
+        image: numpy array
     '''
+    image = Image.open(image_path)
+    if crop_mode == "random":
+        image = random_crop(image, image_size)
+    elif crop_mode == None:
+        image = image.resize((image_size, image_size))
+    else:
+        raise ValueError('Unknown crop_mode')
+
     if train:
         image = color_jitter(image)
         
@@ -194,29 +218,86 @@ def aug_images_single(image, train):
     return image
 
 
+def _process_image_worker(tup):
+    process, img_path, image_size, train, crop_mode = tup
+    ret = process(img_path, image_size, train, crop_mode)
+    return ret
 
 
+def batch_handle_with_multi_process(image_list, image_size, train,
+                                    crop_mode, standard):
+    '''batch_x: image_path '''
+    pool = multiprocessing.Pool()
+    result = pool.map(_process_image_worker,
+        ((load_and_process_single_image, image_path, 
+          image_size, train, crop_mode) for image_path in image_list))
+    pool.close()
+    pool.join()
+    batch_x = np.array(result)
+
+    if standard:
+        batch_x = z_score(batch_x)
+    else:
+        # batch_x = batch_x.astype(np.float32)
+        batch_x = batch_x / 127.5
+        batch_x = batch_x - 1
+    return batch_x
 
 
+def batch_handle(image_list, image_size, train, crop_mode, standard):
+    batch_x = []
+    for image_path in image_list:
+        image = load_and_process_single_image(image_path, image_size,
+                                              train, crop_mode)
+        batch_x.append(image)
+    batch_x = np.array(batch_x)
+
+    if standard:
+        batch_x = z_score(batch_x)
+    else:
+        # batch_x = batch_x.astype(np.float32)
+        batch_x = batch_x / 127.5
+        batch_x = batch_x - 1
+    return batch_x
 
 
+def data_generator(annotation_list, batch_size, image_size,
+                   image_dir, train, standard, crop_mode, multi_process):
+    '''data generator for fit_generator'''
+    n = len(annotation_list)
+    i = 0
+    while True:
+        batch_list = [] #add
+        for b in range(batch_size):
+            if i==0:
+                np.random.shuffle(annotation_list)
+            batch_list.append(annotation_list[i]) #add
+            i = (i+1) % n
+
+        image_list = [image_dir+batch_list[j][1] for j in range(len(batch_list))]
+        label_list = [batch_list[j][0] for j in range(len(batch_list))]
+
+        #多进程数据增强
+        if multi_process:
+            image_data = batch_handle_with_multi_process(image_list, 
+                                        image_size, train, crop_mode, standard)
+        else:
+            image_data = batch_handle(image_list, image_size,
+                                      train, crop_mode, standard)
+
+        label_data = [to_categorical(label, num_classes=80) 
+                      for label in label_list]
+        label_data = np.array(label_data)
+        yield (image_data, label_data)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def data_generator_wrapper(annotation_list, batch_size, image_size, image_dir,
+                           train=True, standard=True, crop_mode='random', 
+                           multi_process=False):
+    n = len(annotation_list)
+    if n==0 or batch_size<=0:
+        return None
+    return data_generator(annotation_list, batch_size, image_size,
+                          image_dir, train, standard, crop_mode, multi_process)
 
 

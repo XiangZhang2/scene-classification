@@ -1,10 +1,16 @@
-# -*- coding:utf-8 -*-a
+# -*- coding:utf-8 -*-
 from multiprocessing import Process, Pool
 import os, time
+import multiprocessing
+from tensorflow.python.client import device_lib
 
-a = (1,2)
-b, c = a
-print a,b,c
+
+a = ('a'
+    'b'
+    'c')
+b = 'abc'
+if a==b:
+    print True
 
 
 

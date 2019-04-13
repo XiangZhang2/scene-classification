@@ -37,7 +37,7 @@ def label_shuffle(annotation_list):
             annotation = [int(k), image_list_dic[str(k)][z]]
             annotation_list_with_shuffle.append(annotation)
     #print len(annotation_list_with_shuffle) # 689690
-
+    np.random.shuffle(annotation_list_with_shuffle)
     return annotation_list_with_shuffle
 
 
